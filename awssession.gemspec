@@ -6,6 +6,7 @@ require 'awssession/version'
 Gem::Specification.new do |spec|
   spec.name          = 'awssession'
   spec.version       = AwsSession::VERSION
+  spec.licenses      = ['MIT']
   spec.authors       = ['Stefan - Zipkid - Goethals']
   spec.email         = ['stefan.goethals@vrt.be']
 
