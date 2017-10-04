@@ -6,7 +6,7 @@ require 'aws-sdk-ssm'
 require 'aws_config'
 require 'pp'
 
-profile_name = 'vrt-dpc-sandbox-admin'
+profile_name = ARGV[0]
 profile = AWSConfig[profile_name]
 profile['name'] = profile_name
 
