@@ -19,13 +19,93 @@ require 'io/console'
 class AwsSession
   def initialize(options)
     @profile = options[:profile]
-    @session_save_lifetime = options[:session_save_lifetime] || 3600
-    @session_save_filename = options[:session_save_lifetime] || "#{@profile.name}_aws-session.yaml"
+    @sts_lifetime = options[:sts_lifetime] || 129_600
+    @sts_filename = options[:sts_filename] || "#{@profile.name}_aws-sts-session.yaml"
+    @role_lifetime = options[:role_lifetime] || 3_600
+    @role_filename = options[:role_filename] || "#{@profile.name}_aws-role-session.yaml"
+    @session_save_path = options[:session_save_path] || "#{Dir.home}/.aws/cache"
   end
 
   def start
     load_session
     create_session
+  end
+
+  def load_session
+    load_role_session if File.file?("#{@session_save_path}/#{@role_filename}")
+    load_sts_session if @role_session.nil? && File.file?("#{@session_save_path}/#{@sts_filename}")
+  end
+
+  def load_role_session
+    @role_session = YAML.load_file("#{@session_save_path}/#{@role_filename}") # Load
+    if Time.now > @role_session.credentials.expiration
+      # or soooooooon !
+      puts 'Role session credentials expired. Removing obsolete role session file'
+      @role_session = nil
+      File.delete("#{@session_save_path}/#{@role_filename}")
+    else
+      puts 'Found valid role session credentials.'
+    end
+  end
+
+  def load_sts_session
+    @sts_session = YAML.load_file("#{@session_save_path}/#{@sts_filename}") # Load
+    if Time.now > @sts_session.credentials.expiration
+      # or soooooooon !
+      puts 'STS session credentials expired. Removing obsolete sts session file'
+      @sts_session = nil
+      File.delete("#{@session_save_path}/#{@sts_filename}")
+    else
+      puts 'Found valid sts session credentials.'
+    end
+  end
+
+  def create_session
+    if @role_session.nil? && @sts_session.nil?
+      read_token_input
+      sts_session_token
+      save_session @sts_filename, @sts_session
+    end
+    return unless @role_session.nil?
+    assume_role
+    save_session @role_filename, @role_session
+  end
+
+  def read_token_input
+    print 'Enter AWS MFA token: '
+    @token_code = STDIN.noecho(&:gets)
+    @token_code.chomp!
+    puts ''
+  end
+
+  def sts_session_token
+    sts_client = Aws::STS::Client.new(
+      access_key_id: @profile.aws_access_key_id,
+      secret_access_key: @profile.aws_secret_access_key
+    )
+    @sts_session = sts_client.get_session_token(
+      duration_seconds: @sts_lifetime,
+      serial_number: @profile.mfa_serial,
+      token_code: @token_code
+    )
+  end
+
+  def assume_role
+    sts_client = Aws::STS::Client.new(
+      access_key_id: @sts_session.credentials.access_key_id,
+      secret_access_key: @sts_session.credentials.secret_access_key,
+      session_token: @sts_session.credentials.session_token
+    )
+    @role_session = sts_client.assume_role(
+      duration_seconds: @role_lifetime,
+      role_arn: @profile.role_arn,
+      role_session_name: 'mysession'
+    )
+  end
+
+  def save_session(file, session)
+    FileUtils.mkdir_p(@session_save_path)
+    File.open("#{@session_save_path}/#{file}", 'w') { |f| f.write session.to_yaml }
   end
 
   def credentials
@@ -34,59 +114,9 @@ class AwsSession
 
   def session_credentials
     [
-      @assumed_role.credentials.access_key_id,
-      @assumed_role.credentials.secret_access_key,
-      @assumed_role.credentials.session_token
+      @role_session.credentials.access_key_id,
+      @role_session.credentials.secret_access_key,
+      @role_session.credentials.session_token
     ]
-  end
-
-  def create_session
-    if !@session
-      read_token_input
-      assume_role
-      save_session @assumed_role
-    else
-      @assumed_role = @session
-    end
-  end
-
-  def read_token_input
-    print 'Enter MFA token plz: '
-    @token_code = STDIN.noecho(&:gets) # gets.chomp
-    @token_code.chomp!
-    puts ''
-  end
-
-  def sts_client
-    Aws::STS::Client.new(
-      access_key_id: @profile.aws_access_key_id,
-      secret_access_key: @profile.aws_secret_access_key
-    )
-  end
-
-  def assume_role
-    @assumed_role = sts_client.assume_role(
-      duration_seconds: @session_save_lifetime,
-      role_arn: @profile.role_arn,
-      role_session_name: 'mysession',
-      serial_number: @profile.mfa_serial,
-      token_code: @token_code
-    )
-  end
-
-  def save_session(role)
-    File.open(@session_save_filename, 'w') { |f| f.write role.to_yaml } # Store
-  end
-
-  def load_session
-    return unless File.file?(@session_save_filename)
-    @session = YAML.load_file(@session_save_filename) # Load
-    if Time.now > @session.credentials.expiration
-      puts 'Session credentials expired. Removing obsolete sessions.yaml file'
-      @session = nil
-      File.delete(@session_save_filename)
-    else
-      puts 'Found valid session credentials.'
-    end
   end
 end
