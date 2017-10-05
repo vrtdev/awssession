@@ -24,6 +24,7 @@ class AwsSession
     @role_lifetime = options[:role_lifetime] || 3_600
     @role_filename = options[:role_filename] || "#{@profile.name}_aws-role-session.yaml"
     @session_save_path = options[:session_save_path] || "#{Dir.home}/.aws/cache"
+    @debug = options[:debug] || 0
   end
 
   def start
@@ -40,11 +41,11 @@ class AwsSession
     @role_session = YAML.load_file("#{@session_save_path}/#{@role_filename}") # Load
     if Time.now > @role_session.credentials.expiration
       # or soooooooon !
-      puts 'Role session credentials expired. Removing obsolete role session file'
+      puts 'Role session credentials expired. Removing obsolete role session file' if @debug > 0
       @role_session = nil
       File.delete("#{@session_save_path}/#{@role_filename}")
     else
-      puts 'Found valid role session credentials.'
+      puts 'Found valid role session credentials.' if @debug > 0
     end
   end
 
@@ -52,11 +53,11 @@ class AwsSession
     @sts_session = YAML.load_file("#{@session_save_path}/#{@sts_filename}") # Load
     if Time.now > @sts_session.credentials.expiration
       # or soooooooon !
-      puts 'STS session credentials expired. Removing obsolete sts session file'
+      puts 'STS session credentials expired. Removing obsolete sts session file' if @debug > 0
       @sts_session = nil
       File.delete("#{@session_save_path}/#{@sts_filename}")
     else
-      puts 'Found valid sts session credentials.'
+      puts 'Found valid sts session credentials.' if @debug > 0
     end
   end
 
