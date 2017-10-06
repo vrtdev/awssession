@@ -3,6 +3,7 @@ require 'awssession/version'
 require 'aws-sdk-core'
 require 'yaml'
 require 'io/console'
+require 'time'
 
 # AWS Session creation with profile
 # Structure of options[:profile]
@@ -44,8 +45,8 @@ class AwsSession
       puts 'Role session credentials expired. Removing obsolete role session file' if @debug > 0
       @role_session = nil
       File.delete("#{@session_save_path}/#{@role_filename}")
-    else
-      puts 'Found valid role session credentials.' if @debug > 0
+    elsif @debug > 0
+      puts 'Found valid role session credentials.'
     end
   end
 
@@ -56,8 +57,8 @@ class AwsSession
       puts 'STS session credentials expired. Removing obsolete sts session file' if @debug > 0
       @sts_session = nil
       File.delete("#{@session_save_path}/#{@sts_filename}")
-    else
-      puts 'Found valid sts session credentials.' if @debug > 0
+    elsif @debug > 0
+      puts 'Found valid sts session credentials.'
     end
   end
 
@@ -100,7 +101,7 @@ class AwsSession
     @role_session = sts_client.assume_role(
       duration_seconds: @role_lifetime,
       role_arn: @profile.role_arn,
-      role_session_name: 'mysession'
+      role_session_name: "#{ENV['USER']}-#{Time.now.utc.iso8601.tr!('-:', '_')}"
     )
   end
 
