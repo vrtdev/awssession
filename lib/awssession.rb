@@ -4,6 +4,7 @@ require 'aws-sdk-core'
 require 'yaml'
 require 'io/console'
 require 'time'
+require 'fileutils'
 
 # AWS Session creation with profile
 # Structure of options[:profile]
@@ -21,9 +22,9 @@ class AwsSession
   def initialize(options)
     @profile = options[:profile]
     @sts_lifetime = options[:sts_lifetime] || 129_600
-    @sts_filename = options[:sts_filename] || "#{@profile.name}_aws-sts-session.yaml"
+    @sts_filename = options[:sts_filename] || 'aws-sts-session.yaml'
     @role_lifetime = options[:role_lifetime] || 3_600
-    @role_filename = options[:role_filename] || "#{@profile.name}_aws-role-session.yaml"
+    @role_filename = options[:role_filename] || 'aws-role-session.yaml'
     @session_save_path = options[:session_save_path] || "#{Dir.home}/.aws/cache"
     @debug = options[:debug] || 0
   end
@@ -34,29 +35,30 @@ class AwsSession
   end
 
   def load_session
-    load_role_session if File.file?("#{@session_save_path}/#{@role_filename}")
-    load_sts_session if @role_session.nil? && File.file?("#{@session_save_path}/#{@sts_filename}")
+    load_role_session if File.file?("#{@session_save_path}/#{@profile.name}_#{@role_filename}")
+    load_sts_session if @role_session.nil? && File.file?("#{@session_save_path}/#{@profile.name}_#{@sts_filename}")
   end
 
   def load_role_session
-    @role_session = YAML.load_file("#{@session_save_path}/#{@role_filename}") # Load
+    @role_session = YAML.load_file("#{@session_save_path}/#{@profile.name}_#{@role_filename}") # Load
     if Time.now > @role_session.credentials.expiration
       # or soooooooon !
       puts 'Role session credentials expired. Removing obsolete role session file' if @debug > 0
       @role_session = nil
-      File.delete("#{@session_save_path}/#{@role_filename}")
-    elsif @debug > 0
-      puts 'Found valid role session credentials.'
+      File.delete("#{@session_save_path}/#{@profile.name}_#{@role_filename}")
+    else
+      FileUtils.ln_s("#{@session_save_path}/#{@profile.name}_#{@role_filename}", "./.#{@role_filename}", force: true)
+      puts 'Found valid role session credentials.' if @debug > 0
     end
   end
 
   def load_sts_session
-    @sts_session = YAML.load_file("#{@session_save_path}/#{@sts_filename}") # Load
+    @sts_session = YAML.load_file("#{@session_save_path}/#{@profile.name}_#{@sts_filename}") # Load
     if Time.now > @sts_session.credentials.expiration
       # or soooooooon !
       puts 'STS session credentials expired. Removing obsolete sts session file' if @debug > 0
       @sts_session = nil
-      File.delete("#{@session_save_path}/#{@sts_filename}")
+      File.delete("#{@session_save_path}/#{@profile.name}_#{@sts_filename}")
     elsif @debug > 0
       puts 'Found valid sts session credentials.'
     end
@@ -107,7 +109,7 @@ class AwsSession
 
   def save_session(file, session)
     FileUtils.mkdir_p(@session_save_path)
-    File.open("#{@session_save_path}/#{file}", 'w') { |f| f.write session.to_yaml }
+    File.open("#{@session_save_path}/#{@profile.name}_#{file}", 'w') { |f| f.write session.to_yaml }
   end
 
   def credentials

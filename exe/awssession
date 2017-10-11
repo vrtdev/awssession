@@ -1,0 +1,20 @@
+#!/usr/bin/env ruby
+
+require 'awssession'
+require 'aws_config'
+
+profile_name = ARGV.shift
+profile = AWSConfig[profile_name]
+begin
+  profile['name'] = profile_name
+rescue NoMethodError
+  puts "Requested role '#{profile_name}' not found."
+  exit 1
+end
+
+awssession = AwsSession.new(profile: profile)
+awssession.start
+
+exec(ARGV.join(' '))
+
+# vim:set fileencoding=utf8 fileformat=unix filetype=ruby tabstop=2 expandtab:
